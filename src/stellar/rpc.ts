@@ -85,9 +85,27 @@ export async function getLatestLedgerInfo(): Promise<{ sequence: number; hash: s
  *  whose events may already be safely folded and committed. */
 export async function getLedgerHash(sequence: number): Promise<string | null> {
   try {
-    const res = await server.getLedgers({ startLedger: sequence, pagination: { limit: 1 } })
+    const res = await getLedgers({ startLedger: sequence, pagination: { limit: 1 } })
     return res.ledgers[0]?.hash ?? null
   } catch {
     return null
   }
+}
+
+export async function getEvents(request: rpc.Api.GetEventsRequest): Promise<rpc.Api.GetEventsResponse> {
+  return withRateLimitRetry(
+    async () => {
+      return await server.getEvents(request)
+    },
+    'getEvents'
+  )
+}
+
+export async function getLedgers(request: rpc.Api.GetLedgersRequest): Promise<rpc.Api.GetLedgersResponse> {
+  return withRateLimitRetry(
+    async () => {
+      return await server.getLedgers(request)
+    },
+    'getLedgers'
+  )
 }

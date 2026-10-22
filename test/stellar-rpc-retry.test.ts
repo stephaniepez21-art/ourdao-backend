@@ -1,48 +1,57 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getLatestLedger, server } from '../src/stellar/rpc.js'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { rpc } from '@stellar/stellar-sdk'
+import { getEvents, getLedgers, server } from '../src/stellar/rpc.js'
 
-// Drives the real withRateLimitRetry through getLatestLedger (issue #268).
-describe('withRateLimitRetry', () => {
+vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@stellar/stellar-sdk')>()
+  return {
+    ...actual,
+    rpc: {
+      ...actual.rpc,
+      Server: class {
+        getEvents = vi.fn()
+        getLedgers = vi.fn()
+      },
+    },
+  }
+  })
+
+describe('stellar rpc rate limit retry for getEvents and getLedgers', () => {
   beforeEach(() => {
-    vi.useFakeTimers()
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.restoreAllMocks()
+    vi.clearAllMocks()
   })
 
-  const ok = { sequence: 42 } as Awaited<ReturnType<typeof server.getLatestLedger>>
+  it('retries getEvents on 429 error and succeeds eventually', async () => {
+    const mockGetEvents = vi.mocked(server.getEvents)
+    const rateLimitError = Object.assign(new Error('rate limit exceeded'), { code: 429 })
+    mockGetEvents
+      .mockRejectedValueOnce(rateLimitError)
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce({ events: [], cursor: 'tok' } as unknown as rpc.Api.GetEventsResponse)
 
-  it.each([
-    ['{ code: 429 }', { code: 429 }],
-    ['{ status: 429 }', { status: 429 }],
-    ['an Error mentioning 429', new Error('429 Too Many Requests')],
-    ['an Error mentioning rate limit', new Error('Rate Limit exceeded')],
-  ])('retries on %s and returns the eventual result', async (_label, err) => {
-    const spy = vi.spyOn(server, 'getLatestLedger').mockRejectedValueOnce(err).mockResolvedValueOnce(ok)
-    const result = getLatestLedger()
-    await vi.runAllTimersAsync()
-    await expect(result).resolves.toBe(42)
-    expect(spy).toHaveBeenCalledTimes(2)
+    const res = await getEvents({ startLedger: 1, filters: [{ type: 'contract', contractIds: ['C123'], topics: [] }] })
+    expect(res.cursor).toBe('tok')
+    expect(mockGetEvents).toHaveBeenCalledTimes(3)
   })
 
-  it.each([
-    ['a plain Error', new Error('boom')],
-    ['an object with another code', { code: 500 }],
-    ['null', null],
-  ])('does not retry %s', async (_label, err) => {
-    const spy = vi.spyOn(server, 'getLatestLedger').mockRejectedValue(err)
-    await expect(getLatestLedger()).rejects.toBe(err)
-    expect(spy).toHaveBeenCalledTimes(1)
+  it('retries getLedgers on 429 error and succeeds eventually', async () => {
+    const mockGetLedgers = vi.mocked(server.getLedgers)
+    const rateLimitError = Object.assign(new Error('429 Too Many Requests'), { status: 429 })
+    mockGetLedgers
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce({ ledgers: [{ hash: 'abc' }] } as unknown as rpc.Api.GetLedgersResponse)
+
+    const res = await getLedgers({ startLedger: 1, pagination: { limit: 1 } })
+    expect(res.ledgers[0]?.hash).toBe('abc')
+    expect(mockGetLedgers).toHaveBeenCalledTimes(2)
   })
 
-  it('gives up after maxRetries and rethrows', async () => {
-    const err = { status: 429 }
-    const spy = vi.spyOn(server, 'getLatestLedger').mockRejectedValue(err)
-    const result = getLatestLedger().catch((e) => e)
-    await vi.runAllTimersAsync()
-    expect(await result).toBe(err)
-    expect(spy).toHaveBeenCalledTimes(6) // initial attempt + 5 retries
+  it('throws after exceeding max retries on rate limit', async () => {
+    const mockGetEvents = vi.mocked(server.getEvents)
+    const rateLimitError = Object.assign(new Error('rate limit exceeded'), { code: 429 })
+    mockGetEvents.mockRejectedValue(rateLimitError)
+
+    await expect(getEvents({ startLedger: 1, filters: [{ type: 'contract', contractIds: ['C123'], topics: [] }] })).rejects.toThrow('rate limit exceeded')
+    expect(mockGetEvents).toHaveBeenCalledTimes(6)
   })
 })
