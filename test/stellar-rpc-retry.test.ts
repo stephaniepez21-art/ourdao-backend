@@ -7,6 +7,7 @@ vi.mock('../src/stellar/rpc.js', async (importOriginal) => {
   return {
     ...actual,
     server: {
+      ...actual.server,
       getEvents: vi.fn(),
       getLedgers: vi.fn(),
     },
