@@ -44,7 +44,7 @@ import { createHistoryCache } from '../history-cache.js'
 // is stored as-is — trust level depends on how the server is deployed.
 // `payload` is an action-specific object (event id, ledger, etc.) that gives
 // an auditor enough context to reconstruct what changed.
-async function writeAuditLog(
+export async function writeAuditLog(
   adminAddress: string,
   action: AdminAuditAction | string,
   ip: string | null,
