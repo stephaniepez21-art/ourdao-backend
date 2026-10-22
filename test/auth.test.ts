@@ -605,12 +605,43 @@ describe('AuthFailureTracker — per-address exponential backoff (issues #183, #
     tracker.shutdown()
   })
 
-  it('shutdown() stops the timer and is idempotent — a second call is a no-op', () => {
+  it('shutdown stops the timer and is idempotent — a second call is a no-op', () => {
     const tracker = newTracker()
     expect((tracker as unknown as { cleanupTimer: NodeJS.Timeout | null }).cleanupTimer).not.toBeNull()
     tracker.shutdown()
     expect((tracker as unknown as { cleanupTimer: NodeJS.Timeout | null }).cleanupTimer).toBeNull()
     expect(() => tracker.shutdown()).not.toThrow()
+  })
+
+  it('integration: API routes use auth failure tracking and throttle repeated authentication failures', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-30T00:00:00Z'))
+    const tracker = newTracker()
+    const addr = 'GA-API-BRUTE'
+    const badHeaders = { authorization: `StellarSignature ${addr}:bad-sig:nonce1` }
+
+    const store = new MemoryNonceStore()
+    const nonce = await store.issue(addr)
+    const validHeaders = { authorization: `StellarSignature ${addr}:${sign(nonce, addr)}:${nonce}` }
+
+    // First failure records failure
+    const res1 = await authenticateRequest(badHeaders, store, undefined, undefined, tracker)
+    expect(res1).toMatchObject({ authenticated: false, status: 401 })
+    expect(tracker.getRemainingBackoff(addr)).toBe(1000)
+
+    // Subsequent failure within backoff window is throttled with 429
+    const res2 = await authenticateRequest(badHeaders, store, undefined, undefined, tracker)
+    expect(res2).toMatchObject({ authenticated: false, status: 429, error: expect.any(String) }
+)
+
+    // After backoff elapses, valid request succeeds
+    vi.advanceTimersByTime(1000)
+    const res3 = await authenticateRequest(validHeaders, store, undefined, undefined, tracker)
+    expect(res3).toEqual({ authenticated: true, address: addr })
+    expect(tracker.getRemainingBackoff(addr)).toBe(0)
+
+    await store.shutdown()
+    tracker.shutdown()
   })
 
   it('constructs and works even when the timer handle has no unref (environment guard)', () => {

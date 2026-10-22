@@ -13,7 +13,7 @@ import { pool } from '../db/index.js'
 import { registerCachePolicy } from './cache-policy.js'
 import { clientErrorHandler, frameworkErrors, registerErrorHandling } from './errors.js'
 import { registerRoutes } from './routes/index.js'
-import { MemoryNonceStore, PostgresNonceStore, type NonceStore } from '../auth.js'
+import { MemoryNonceStore, PostgresNonceStore, AuthFailureTracker, type NonceStore } from '../auth.js'
 import { readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
@@ -69,6 +69,7 @@ const packageVersionResult = readPackageVersion()
 // gracefully when the process exits. Set by buildServer(), accessed by
 // shutdownNonceStore().
 let activeNonceStore: NonceStore | null = null
+let activeFailureTracker: AuthFailureTracker | null = null
 
 /**
  * Shut down the active nonce store's timers (issue #207). Called from the
@@ -179,6 +180,10 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
     app.log.error({ err: packageVersionResult.error }, 'Failed to read package.json version; /version will report "unknown"')
   }
 
+  // Instantiate AuthFailureTracker for brute-force backoff and lockout protection
+  const failureTracker = new AuthFailureTracker()
+  activeFailureTracker = failureTracker
+
   // Select nonce store implementation based on config (issue #66)
   let nonceStore: NonceStore
   if (config.db.nonceStore === 'postgres') {
@@ -189,9 +194,10 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // Issue #207: store the nonce store for shutdown access
   activeNonceStore = nonceStore
 
-  // Issue #182: register shutdown hook to clean up nonce store timers on close
+  // Issue #182: register shutdown hook to clean up nonce store timers and failure tracker on close
   app.addHook('onClose', async () => {
     await nonceStore.shutdown()
+    failureTracker.shutdown()
   })
 
   // ── OpenAPI / Swagger (issue #215) ──
@@ -269,7 +275,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   })
 
   // ── Routes (including /api/stream — issue #158) ──
-  await app.register(registerRoutes, { prefix: '/api', nonceStore })
+  await app.register(registerRoutes, { prefix: '/api', nonceStore, failureTracker })
 
   // ── Liveness probe (issue #2) — no DB round trip ──
   app.get('/health', async () => ({ status: 'ok', contract: config.stellar.contractId || null }))
