@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg'
 import { SpanStatusCode } from '@opentelemetry/api'
 import { config, assertContractsConfigured } from '../config.js'
 import { pool, query, queryOne } from '../db/index.js'
-import { server, getLatestLedger, getLatestLedgerInfo, getLedgerHash } from '../stellar/rpc.js'
+import { server, getLatestLedger, getLatestLedgerInfo, getLedgerHash, getEvents } from '../stellar/rpc.js'
 import { decodeEvent, type DecodedEvent } from '../stellar/events.js'
 import { applyEvent } from './handlers.js'
 import { DERIVED_TABLES, resetDaoTotals } from './derived-tables.js'
@@ -751,7 +751,7 @@ export async function fetchOnce(contractId: string): Promise<void> {
       break
     }
 
-    const res = await server.getEvents(currentRequest)
+    const res = await getEvents(currentRequest)
     const events = res.events ?? []
     const pageCount = events.length
 

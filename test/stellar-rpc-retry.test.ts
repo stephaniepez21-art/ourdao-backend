@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getLatestLedger, server } from '../src/stellar/rpc.js'
+import { getLatestLedger, getEvents, getLedgers, server } from '../src/stellar/rpc.js'
 
-// Drives the real withRateLimitRetry through getLatestLedger (issue #268).
+// Drives the real withRateLimitRetry through getLatestLedger, getEvents, and getLedgers (issue #268).
 describe('withRateLimitRetry', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -44,5 +44,23 @@ describe('withRateLimitRetry', () => {
     await vi.runAllTimersAsync()
     expect(await result).toBe(err)
     expect(spy).toHaveBeenCalledTimes(6) // initial attempt + 5 retries
+  })
+
+  it('retries getEvents on rate limit (429) and succeeds', async () => {
+    const eventsOk = { events: [], cursor: 'tok' } as unknown as Awaited<ReturnType<typeof server.getEvents>>
+    const spy = vi.spyOn(server, 'getEvents').mockRejectedValueOnce({ code: 429 }).mockResolvedValueOnce(eventsOk)
+    const result = getEvents({ startLedger: 1, filters: [] })
+    await vi.runAllTimersAsync()
+    await expect(result).resolves.toEqual(eventsOk)
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries getLedgers on rate limit (429) and succeeds', async () => {
+    const ledgersOk = { ledgers: [] } as unknown as Awaited<ReturnType<typeof server.getLedgers>>
+    const spy = vi.spyOn(server, 'getLedgers').mockRejectedValueOnce(new Error('429 Too Many Requests')).mockResolvedValueOnce(ledgersOk)
+    const result = getLedgers(100, 5)
+    await vi.runAllTimersAsync()
+    await expect(result).resolves.toEqual(ledgersOk)
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 })
