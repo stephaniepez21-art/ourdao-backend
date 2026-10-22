@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { query, pool } from '../src/db/index.js'
-import type { PoolClient } from 'pg'
+// import type { PoolClient } from 'pg'
 import { closeDb, resetDb } from './db.js'
 
 describe('Indexer: dao_totals atomic updates with row-level locks (issue #269)', () => {

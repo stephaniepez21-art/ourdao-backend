@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildServer, shutdownNonceStore } from '../src/api/server.js'
-import { pool } from '../src/db/index.js'
+// import { pool } from '../src/db/index.js'
 import { shutdownSharedListener } from '../src/api/stream.js'
 import { resetDb, closeDb } from './db.js'
 
@@ -25,7 +25,7 @@ describe('API graceful shutdown (#207)', () => {
     let shuttingDown = false
     const SHUTDOWN_TIMEOUT_MS = 10_000
 
-    const shutdown = async (signal: string) => {
+    const shutdown = async (_signal: string) => {
       if (shuttingDown) {
         // Second call should return immediately
         return { reentrant: true }

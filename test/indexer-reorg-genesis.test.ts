@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { query } from '../src/db/index.js'
 import { closeDb, resetDb } from './db.js'
-import { config } from '../src/config.js'
+// import { config } from '../src/config.js'
 
 describe('Indexer: reorg detection at genesis ledger (issue #267)', () => {
   beforeEach(async () => {

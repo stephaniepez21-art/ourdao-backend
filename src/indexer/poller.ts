@@ -12,6 +12,15 @@ import { notifyStreamClientsAfterCommit, STREAM_CHANNELS, type StreamChannel } f
 import { invalidateCache, invalidateMembersListCache, memberSummaryCacheKey } from '../cache/redis.js'
 import { getTracer } from '../telemetry.js'
 
+
+// Issue #174: Clean up expired failed_events rows (retention policy).
+async function cleanupExpiredFailedEvents(): Promise<void> {
+  try {
+    await pool.query('SELECT delete_expired_failed_events()')
+  } catch (err) {
+    console.error(`[indexer] failed to cleanup expired failed_events: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
 interface CursorRow {
   paging_token: string | null
   last_ledger: number | null
@@ -593,14 +602,7 @@ async function persistQuarantineState(state: QuarantineState | null, escalating 
   }
 }
 
-// Issue #174: Clean up expired failed_events rows (retention policy).
-async function cleanupExpiredFailedEvents(): Promise<void> {
-  try {
-    await pool.query('SELECT delete_expired_failed_events()')
-  } catch (err) {
-    console.error(`[indexer] failed to cleanup expired failed_events: ${err instanceof Error ? err.message : String(err)}`)
-  }
-}
+
 
 /** Wraps `ingestPage`'s whole-page-transaction fast path with the quarantine
  *  fallback (issue #43). A `ReorgDetectedError` always propagates immediately
