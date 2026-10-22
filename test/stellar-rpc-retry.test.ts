@@ -12,6 +12,8 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
         getEvents = vi.fn()
         getLedgers = vi.fn()
       },
+      getEvents: vi.fn(),
+      getLedgers: vi.fn(),
     },
   }
   })
