@@ -65,6 +65,40 @@ describe('API: members and loans', () => {
     expect(body.every((l: { borrower: string }) => l.borrower === borrowerA)).toBe(true)
   })
 
+  it('GET /api/loans filters by status and validates status query parameter', async () => {
+    await query(
+      `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
+       (1, 'GA', 100, 100, 'active'), (2, 'GA', 200, 0, 'repaid'), (3, 'GA', 300, 300, 'defaulted')`
+    )
+    const activeRes = await app.inject({ method: 'GET', url: '/api/loans?status=active' })
+    expect(activeRes.statusCode).toBe(200)
+    const activeBody = activeRes.json()
+    expect(activeBody).toHaveLength(1)
+    expect(activeBody[0].status).toBe('active')
+
+    const invalidRes = await app.inject({ method: 'GET', url: '/api/loans?status=unknown' })
+    expect(invalidRes.statusCode).toBe(400)
+  })
+
+  it('GET /api/loans filters by status combined with borrower and pagination', async () => {
+    const borrowerA = Keypair.random().publicKey()
+    const borrowerB = Keypair.random().publicKey()
+    await query(
+      `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
+       (1, $1, 100, 100, 'active'),
+       (2, $1, 200, 200, 'active'),
+       (3, $2, 300, 300, 'active'),
+       (4, $1, 400, 0, 'repaid')`,
+      [borrowerA, borrowerB]
+    )
+    const res = await app.inject({ method: 'GET', url: `/api/loans?borrower=${borrowerA}&status=active&before=3&limit=1` })
+    const body = res.json()
+    expect(body).toHaveLength(1)
+    expect(body[0].id).toBe(1)
+    expect(body[0].borrower).toBe(borrowerA)
+    expect(body[0].status).toBe('active')
+  })
+
   it('GET /api/loans supports before-id cursor pagination', async () => {
     await query(
       `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
