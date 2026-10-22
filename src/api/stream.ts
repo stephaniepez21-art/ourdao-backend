@@ -936,3 +936,22 @@ export async function notifyStreamClientsOrThrow(
   }
   await client.query('SELECT pg_notify($1, $2)', [channel, payloadJson])
 }
+
+/**
+ * Broadcast a resync notification across all active stream channels defined in STREAM_CHANNELS safely.
+ * Individual channel failures do not prevent other channels from receiving the notification.
+ */
+export async function broadcastResyncToAllChannels(payload?: Record<string, unknown>): Promise<void> {
+  await Promise.all(
+    Object.values(STREAM_CHANNELS).map(async (channel) => {
+      try {
+        await notifyStreamClientsAfterCommit(channel, payload)
+      } catch (err) {
+        logger.error('Failed to dispatch resync notification to channel', {
+          channel,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    })
+  )
+}
