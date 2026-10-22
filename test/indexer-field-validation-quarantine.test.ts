@@ -44,6 +44,7 @@ vi.mock('../src/stellar/events.js', async (importOriginal) => {
 const getEventsMock = vi.fn()
 vi.mock('../src/stellar/rpc.js', () => ({
   server: { getEvents: (...args: unknown[]) => getEventsMock(...(args as [unknown])) },
+  getEvents: (...args: unknown[]) => getEventsMock(...(args as [unknown])),
   getLatestLedger: vi.fn().mockResolvedValue(100_000),
   getLatestLedgerInfo: vi.fn().mockResolvedValue({ sequence: 100_000, hash: 'HASH_TIP' }),
   getLedgerHash: vi.fn().mockResolvedValue('HASH_FOR_LEDGER'),

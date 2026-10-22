@@ -58,8 +58,6 @@ export async function getLatestLedger(): Promise<number> {
   )
 }
 
-/** Latest-ledger sequence plus its hash (`id`) — used for the coarse rewind
- *  signal in reorg detection (issue #23). */
 export async function getEvents(request: rpc.Api.GetEventsRequest): Promise<rpc.Api.GetEventsResponse> {
   return withRateLimitRetry(
     async () => {

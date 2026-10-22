@@ -22,6 +22,7 @@ const getEventsMock = vi.fn()
 const getLedgerHashMock = vi.fn()
 vi.mock('../src/stellar/rpc.js', () => ({
   server: { getEvents: (...args: unknown[]) => getEventsMock(...(args as [unknown])) },
+  getEvents: (...args: unknown[]) => getEventsMock(...(args as [unknown])),
   getLatestLedger: vi.fn().mockResolvedValue(100_000),
   // Distinct from any per-ledger hash below, so a test that accidentally
   // stored the tip's hash instead of the folded ledger's is caught.
