@@ -9,6 +9,7 @@ vi.mock('../src/stellar/rpc.js', async (importOriginal) => {
   return {
     ...actual,
     getEvents: (...args: unknown[]) => serverGetEventsMock(...(args as [unknown])),
+    getLedgers: (...args: unknown[]) => serverGetLedgersMock(...(args as [unknown])),
     server: {
       ...actual.server,
       getEvents: (...args: unknown[]) => serverGetEventsMock(...(args as [unknown])),
