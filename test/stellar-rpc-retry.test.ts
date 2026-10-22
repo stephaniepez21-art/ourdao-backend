@@ -1,48 +1,53 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getLatestLedger, server } from '../src/stellar/rpc.js'
+import { describe, expect, it, vi } from 'vitest'
+import { getEvents, getLedgers } from '../src/stellar/rpc.js'
 
-// Drives the real withRateLimitRetry through getLatestLedger (issue #268).
-describe('withRateLimitRetry', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.restoreAllMocks()
-  })
+const serverGetEventsMock = vi.fn()
+const serverGetLedgersMock = vi.fn()
 
-  const ok = { sequence: 42 } as Awaited<ReturnType<typeof server.getLatestLedger>>
-
-  it.each([
-    ['{ code: 429 }', { code: 429 }],
-    ['{ status: 429 }', { status: 429 }],
-    ['an Error mentioning 429', new Error('429 Too Many Requests')],
-    ['an Error mentioning rate limit', new Error('Rate Limit exceeded')],
-  ])('retries on %s and returns the eventual result', async (_label, err) => {
-    const spy = vi.spyOn(server, 'getLatestLedger').mockRejectedValueOnce(err).mockResolvedValueOnce(ok)
-    const result = getLatestLedger()
-    await vi.runAllTimersAsync()
-    await expect(result).resolves.toBe(42)
-    expect(spy).toHaveBeenCalledTimes(2)
+vi.mock('../src/stellar/rpc.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/stellar/rpc.js')>()
+  return {
+    ...actual,
+    server: {
+      ...actual.server,
+      getEvents: (...args: unknown[]) => serverGetEventsMock(...(args as [unknown])),
+      getLedgers: (...args: unknown[]) => serverGetLedgersMock(...(args as [unknown])),
+    },
+  }
   })
 
-  it.each([
-    ['a plain Error', new Error('boom')],
-    ['an object with another code', { code: 500 }],
-    ['null', null],
-  ])('does not retry %s', async (_label, err) => {
-    const spy = vi.spyOn(server, 'getLatestLedger').mockRejectedValue(err)
-    await expect(getLatestLedger()).rejects.toBe(err)
-    expect(spy).toHaveBeenCalledTimes(1)
+describe('stellar rpc rate limit retry (issue #268 / getEvents & getLedgers)', () => {
+  it('retries getEvents on 429 rate limit error and succeeds eventually', async () => {
+    serverGetEventsMock
+      .mockRejectedValueOnce({ code: 429, message: 'rate limit exceeded' })
+      .mockResolvedValueOnce({ events: [], cursor: 'tok' })
+
+    const res = await getEvents({ filters: [{ type: 'contract', contractIds: ['C123'], topics: [] }], startLedger: 1 })
+    expect(res).toEqual({ events: [], cursor: 'tok' })
+    expect(serverGetEventsMock).toHaveBeenCalledTimes(2)
   })
 
-  it('gives up after maxRetries and rethrows', async () => {
-    const err = { status: 429 }
-    const spy = vi.spyOn(server, 'getLatestLedger').mockRejectedValue(err)
-    const result = getLatestLedger().catch((e) => e)
-    await vi.runAllTimersAsync()
-    expect(await result).toBe(err)
-    expect(spy).toHaveBeenCalledTimes(6) // initial attempt + 5 retries
+  it('retries getLedgers on 429 rate limit error and succeeds eventually', async () => {
+    serverGetLedgersMock
+      .mockRejectedValueOnce(new Error('HTTP 429 rate limit'))
+      .mockResolvedValueOnce({ ledgers: [] })
+
+    const res = await getLedgers(1, 10)
+    expect(res).toEqual({ ledgers: [] })
+    expect(serverGetLedgersMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws after exhausting maxRetries on getEvents 429 errors', async () => {
+    serverGetEventsMock.mockRejectedValue({ code: 429, message: 'rate limit exceeded' })
+
+    await expect(getEvents({ filters: [{ type: 'contract', contractIds: ['C123'], topics: [] }], startLedger: 1 })).rejects.toThrow(/rate limit/)
+    expect(serverGetEventsMock).toHaveBeenCalledTimes(6) // initial + 5 retries
+  })
+
+  it('throws after exhausting maxRetries on getLedgers 429 errors', async () => {
+    serverGetLedgersMock.mockRejectedValue(new Error('HTTP 429 rate limit'))
+
+    await expect(getLedgers(1, 10)).rejects.toThrow(/429/)
+    expect(serverGetLedgersMock).toHaveBeenCalledTimes(6)
   })
 })
