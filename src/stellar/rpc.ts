@@ -13,6 +13,8 @@ export const server = new rpc.Server(config.stellar.rpcUrl, {
   ...(Object.keys(rpcHeaders).length > 0 ? { headers: rpcHeaders } : {}),
 })
 
+
+
 /** Issue #268: Retry with exponential backoff on HTTP 429 rate limit */
 async function withRateLimitRetry<T>(
   fn: () => Promise<T>,
