@@ -11,12 +11,14 @@ import {
   PG_NOTIFY_MAX_PAYLOAD_BYTES,
   STREAM_CHANNELS,
   StreamClient,
+  type StreamChannel,
   dispatchStreamNotification,
   getConnectedStreamCount,
   knownLedger,
   lastReorgLedger,
   notifyStreamClients,
   notifyStreamClientsOrThrow,
+  broadcastResyncToAllChannels,
   parseChannelSubset,
   resetConnectedStreamsForTests,
   shutdownSharedListener,
@@ -95,6 +97,36 @@ describe('API: /api/stream', () => {
     expect(routes).toMatch(/\/api\/stream/)
     // The hard-coded root registration is gone — only the prefixed route remains.
     expect(app.hasRoute({ method: 'GET', url: '/api/stream' })).toBe(true)
+  })
+
+  it('broadcastResyncToAllChannels dispatches resync notifications to subscribers across all stream channels', async () => {
+    const received: Array<{ channel: string; payload: Record<string, unknown> }> = []
+
+    class TestClient extends StreamClient {
+      receiveNotification(channel: StreamChannel, payload: Record<string, unknown>): void {
+        received.push({ channel, payload })
+      }
+    }
+
+    const { reply } = makeFakeStreamPair({ canWrite: true })
+    const client = new TestClient(reply, '127.0.0.1')
+    await client.start(Object.values(STREAM_CHANNELS))
+
+    await broadcastResyncToAllChannels({
+      type: 'resync',
+      event: 'reorg_detected',
+      ledger: 12345,
+    })
+
+    const channelsFound = new Set(received.map((r) => r.channel))
+    for (const ch of Object.values(STREAM_CHANNELS)) {
+      expect(channelsFound.has(ch)).toBe(true)
+    }
+
+    for (const r of received) {
+      expect(r.payload.ledger).toBe(12345)
+      expect(r.payload.event).toBe('reorg_detected')
+    }
   })
 
   it('receives initial connection message on stream', async () => {
