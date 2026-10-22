@@ -183,6 +183,7 @@ export async function buildServer(opts: BuildServerOptions = {}): Promise<Fastif
   // Instantiate AuthFailureTracker for brute-force backoff and lockout protection
   const failureTracker = new AuthFailureTracker()
   activeFailureTracker = failureTracker
+  void activeFailureTracker
 
   // Select nonce store implementation based on config (issue #66)
   let nonceStore: NonceStore
