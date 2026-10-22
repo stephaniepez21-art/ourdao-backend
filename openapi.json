@@ -153,6 +153,53 @@
     },
     "/api/loans": {
       "get": {
+        "summary": "List loans with optional borrower, status, and pagination filters",
+        "tags": [
+          "Loans"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "borrower",
+            "required": false,
+            "description": "Filter loans by borrower address."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "repaid",
+                "defaulted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "description": "Filter loans by status."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "description": "Max rows to return (1-200, default 50)."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "description": "Pagination cursor: return loans with id strictly below this value."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response"
