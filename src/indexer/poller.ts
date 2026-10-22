@@ -9,6 +9,8 @@ import { applyEvent } from './handlers.js'
 import { DERIVED_TABLES, resetDaoTotals } from './derived-tables.js'
 import { REINDEX_LOCK_KEY } from './reindex.js'
 import { notifyStreamClientsAfterCommit, broadcastResyncToAllChannels, STREAM_CHANNELS, type StreamChannel } from '../api/stream.js'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _unusedCleanup = cleanupExpiredFailedEvents
 import { invalidateCache, invalidateMembersListCache, memberSummaryCacheKey } from '../cache/redis.js'
 import { getTracer } from '../telemetry.js'
 
