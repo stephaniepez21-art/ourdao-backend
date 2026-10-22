@@ -153,6 +153,49 @@
     },
     "/api/loans": {
       "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "borrower",
+            "required": false,
+            "description": "Filter by borrower address."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "repaid",
+                "defaulted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "description": "Filter by loan status."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "description": "Max rows to return."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "description": "Pagination cursor."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response"

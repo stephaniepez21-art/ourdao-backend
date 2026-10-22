@@ -65,6 +65,37 @@ describe('API: members and loans', () => {
     expect(body.every((l: { borrower: string }) => l.borrower === borrowerA)).toBe(true)
   })
 
+  it('GET /api/loans filters by status and combines with borrower and pagination', async () => {
+    const borrowerA = Keypair.random().publicKey()
+    const borrowerB = Keypair.random().publicKey()
+    await query(
+      `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
+       (1, $1, 100, 100, 'active'),
+       (2, $1, 200, 0, 'repaid'),
+       (3, $1, 300, 300, 'active'),
+       (4, $2, 400, 400, 'active')`,
+      [borrowerA, borrowerB]
+    )
+
+    // Invalid status validation test
+    const invalidRes = await app.inject({ method: 'GET', url: '/api/loans?status=unknown' })
+    expect(invalidRes.statusCode).toBe(400)
+
+    // Filter by single status
+    const activeRes = await app.inject({ method: 'GET', url: '/api/loans?status=active' })
+    const activeBody = activeRes.json()
+    expect(activeBody).toHaveLength(3)
+    expect(activeBody.every((l: { status: string }) => l.status === 'active')).toBe(true)
+
+    // Combined borrower and status filter with pagination cursor
+    const combinedRes = await app.inject({ method: 'GET', url: `/api/loans?borrower=${borrowerA}&status=active&before=3` })
+    const combinedBody = combinedRes.json()
+    expect(combinedBody).toHaveLength(1)
+    expect(combinedBody[0].id).toBe(1)
+    expect(combinedBody[0].borrower).toBe(borrowerA)
+    expect(combinedBody[0].status).toBe('active')
+  })
+
   it('GET /api/loans supports before-id cursor pagination', async () => {
     await query(
       `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
@@ -74,6 +105,53 @@ describe('API: members and loans', () => {
     const body = res.json()
     expect(body).toHaveLength(1)
     expect(body[0].id).toBe(11)
+  })
+
+  it('GET /api/loans filters by status, combined with borrower and pagination, and rejects invalid status', async () => {
+    const borrowerA = Keypair.random().publicKey()
+    await query(
+      `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
+       (1, $1, 100, 100, 'active'),
+       (2, $1, 200, 0, 'repaid'),
+       (3, $1, 300, 300, 'defaulted'),
+       (4, 'GBOTHE', 400, 400, 'active')`,
+      [borrowerA]
+    )
+
+    // Filter by single status
+    const resActive = await app.inject({ method: 'GET', url: '/api/loans?status=active' })
+    expect(resActive.statusCode).toBe(200)
+    const bodyActive = resActive.json()
+    expect(bodyActive).toHaveLength(2)
+    expect(bodyActive.every((l: { status: string }) => l.status === 'active')).toBe(true)
+
+    // Combine status with borrower
+    const resCombined = await app.inject({ method: 'GET', url: `/api/loans?borrower=${borrowerA}&status=active` })
+    expect(resCombined.statusCode).toBe(200)
+    const bodyCombined = resCombined.json()
+    expect(bodyCombined).toHaveLength(1)
+    expect(bodyCombined[0].id).toBe(1)
+    expect(bodyCombined[0].borrower).toBe(borrowerA)
+    expect(bodyCombined[0].status).toBe('active')
+
+    // Combine status with pagination cursor
+    await query(
+      `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
+       (5, $1, 500, 500, 'active'),
+       (6, $1, 600, 600, 'active')`,
+      [borrowerA]
+    )
+    const resPaged = await app.inject({ method: 'GET', url: `/api/loans?status=active&before=6&limit=1` })
+    expect(resPaged.statusCode).toBe(200)
+    const bodyPaged = resPaged.json()
+    expect(bodyPaged).toHaveLength(1)
+    expect(bodyPaged[0].id).toBe(5)
+    expect(bodyPaged[0].status).toBe('active')
+
+    // Invalid status returns 400
+    const resInvalid = await app.inject({ method: 'GET', url: '/api/loans?status=bogus' })
+    expect(resInvalid.statusCode).toBe(400)
+    expect(resInvalid.json().error).toBe('invalid loan status')
   })
 
   it('GET /api/loans/:id 404s when missing, 200s with the row when present', async () => {
