@@ -53,6 +53,7 @@ function invalidLimit(v: unknown, def = 50, max = 200): boolean {
 // summary payload itself. Named so the LIMIT and the has-more comparison
 // it's checked against can never drift apart.
 const LOANS_EMBED_LIMIT = 100
+const LOAN_STATUSES = ['active', 'repaid', 'defaulted'] as const
 
 // Small helper: clamp a `limit` query param to a sane range.
 function limit(v: unknown, def = 50, max = 200): number {
@@ -484,7 +485,7 @@ export async function registerRoutes(app: FastifyInstance, opts: { nonceStore: N
     return rows.map((r) => ({ ...r, tallies_weighted: false }))
   })
 
-  // --- Loans (optional ?borrower= filter, ?before=<id> cursor) ---
+  // --- Loans (optional ?borrower= and ?status= filters, ?before=<id> cursor) ---
   app.get('/loans', async (req, reply) => {
     setCachePolicy(reply, 'public-live')
     const q = req.query as Record<string, unknown>
@@ -499,11 +500,22 @@ export async function registerRoutes(app: FastifyInstance, opts: { nonceStore: N
     }
     const borrower = typeof q.borrower === 'string' && q.borrower ? q.borrower : null
 
+    if (q.status !== undefined && q.status !== null && q.status !== '') {
+      if (typeof q.status !== 'string' || !(LOAN_STATUSES as readonly string[]).includes(q.status)) {
+        return reply.code(400).send({ error: 'invalid status parameter' })
+      }
+    }
+    const status = typeof q.status === 'string' && q.status ? q.status : null
+
     const conditions: string[] = []
     const params: unknown[] = []
     if (borrower) {
       params.push(borrower)
       conditions.push(`borrower = $${params.length}`)
+    }
+    if (status) {
+      params.push(status)
+      conditions.push(`status = $${params.length}`)
     }
     if (before !== null) {
       params.push(before)
