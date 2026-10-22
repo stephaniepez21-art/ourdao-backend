@@ -65,6 +65,27 @@ describe('API: members and loans', () => {
     expect(body.every((l: { borrower: string }) => l.borrower === borrowerA)).toBe(true)
   })
 
+  it('GET /api/loans filters by status and validates status values', async () => {
+    await query(
+      `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
+       (1, 'GA', 100, 100, 'active'), (2, 'GA', 200, 0, 'repaid'), (3, 'GB', 300, 300, 'defaulted')`
+    )
+    const activeRes = await app.inject({ method: 'GET', url: '/api/loans?status=active' })
+    expect(activeRes.statusCode).toBe(200)
+    const activeBody = activeRes.json()
+    expect(activeBody).toHaveLength(1)
+    expect(activeBody[0].id).toBe(1)
+
+    const invalidRes = await app.inject({ method: 'GET', url: '/api/loans?status=unknown' })
+    expect(invalidRes.statusCode).toBe(400)
+
+    const combinedRes = await app.inject({ method: 'GET', url: '/api/loans?borrower=GA&status=repaid' })
+    expect(combinedRes.statusCode).toBe(200)
+    const combinedBody = combinedRes.json()
+    expect(combinedBody).toHaveLength(1)
+    expect(combinedBody[0].id).toBe(2)
+  })
+
   it('GET /api/loans supports before-id cursor pagination', async () => {
     await query(
       `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
