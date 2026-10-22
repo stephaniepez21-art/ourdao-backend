@@ -47,6 +47,8 @@ function invalidLimit(v: unknown, def = 50, max = 200): boolean {
   return parseLimit(v, def, max) === null
 }
 
+const LOAN_STATUSES = ['active', 'repaid', 'defaulted'] as const
+
 // Issue #165: how many of a member's loans /members/:address/summary embeds
 // inline. The full history is always available, paginated, from
 // GET /api/loans?borrower=<address> — this cap only bounds the size of the
@@ -484,7 +486,7 @@ export async function registerRoutes(app: FastifyInstance, opts: { nonceStore: N
     return rows.map((r) => ({ ...r, tallies_weighted: false }))
   })
 
-  // --- Loans (optional ?borrower= filter, ?before=<id> cursor) ---
+  // --- Loans (optional ?borrower= filter, ?status= filter, ?before=<id> cursor) ---
   app.get('/loans', async (req, reply) => {
     setCachePolicy(reply, 'public-live')
     const q = req.query as Record<string, unknown>
@@ -499,11 +501,22 @@ export async function registerRoutes(app: FastifyInstance, opts: { nonceStore: N
     }
     const borrower = typeof q.borrower === 'string' && q.borrower ? q.borrower : null
 
+    if (q.status !== undefined && q.status !== null && q.status !== '') {
+      if (typeof q.status !== 'string' || !(LOAN_STATUSES as readonly string[]).includes(q.status)) {
+        return reply.code(400).send({ error: `invalid status parameter: expected one of ${LOAN_STATUSES.join(', ')}` })
+      }
+    }
+    const status = typeof q.status === 'string' && q.status ? q.status : null
+
     const conditions: string[] = []
     const params: unknown[] = []
     if (borrower) {
       params.push(borrower)
       conditions.push(`borrower = $${params.length}`)
+    }
+    if (status) {
+      params.push(status)
+      conditions.push(`status = $${params.length}`)
     }
     if (before !== null) {
       params.push(before)

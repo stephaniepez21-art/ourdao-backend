@@ -76,6 +76,30 @@ describe('API: members and loans', () => {
     expect(body[0].id).toBe(11)
   })
 
+  it('GET /api/loans filters by status and validates invalid status', async () => {
+    await query(
+      `INSERT INTO loans (id, borrower, amount, outstanding, status) VALUES
+       (1, 'GA', 100, 100, 'active'),
+       (2, 'GA', 200, 0, 'repaid'),
+       (3, 'GB', 300, 300, 'active'),
+       (4, 'GA', 400, 400, 'defaulted')`
+    )
+    const activeRes = await app.inject({ method: 'GET', url: '/api/loans?status=active' })
+    expect(activeRes.statusCode).toBe(200)
+    const activeBody = activeRes.json()
+    expect(activeBody).toHaveLength(2)
+    expect(activeBody.map((l: { id: number }) => l.id)).toEqual([3, 1])
+
+    const combinedRes = await app.inject({ method: 'GET', url: `/api/loans?borrower=GA&status=active` })
+    expect(combinedRes.statusCode).toBe(200)
+    const combinedBody = combinedRes.json()
+    expect(combinedBody).toHaveLength(1)
+    expect(combinedBody[0].id).toBe(1)
+
+    const invalidRes = await app.inject({ method: 'GET', url: '/api/loans?status=bogus' })
+    expect(invalidRes.statusCode).toBe(400)
+  })
+
   it('GET /api/loans/:id 404s when missing, 200s with the row when present', async () => {
     const missing = await app.inject({ method: 'GET', url: '/api/loans/999' })
     expect(missing.statusCode).toBe(404)
